@@ -43,6 +43,14 @@ A sleek, web-based screenplay editor that works natively with the [Fountain](htt
 - Connect any remote: GitHub, GitLab, Bitbucket, or a custom URL
 - Full commit history visible in the sidebar
 
+**Version Diff**
+- Compare any screenplay to any other screenplay across any project
+- Compare the current file to any prior git commit — see exactly what changed
+- Side-by-side reference column: green = added, red = removed, amber = changed
+- Word-level highlighting on changed blocks so you can see precisely what was rewritten
+- Live diff — the comparison updates in real-time as you type
+- Notes included: shows how many notes were added or removed vs the reference
+
 **Customisation**
 - Dark and light themes
 - Custom colours for every Fountain element type
@@ -132,6 +140,7 @@ The launcher script checks whether the server is already running and skips the s
 | `Ctrl+S` | Save and commit to git |
 | `F11` | Focus mode (hides all UI chrome) |
 | `N` | Toggle margin notes on/off |
+| Split-columns icon | Open diff/compare mode |
 
 ### Element types
 
@@ -156,6 +165,15 @@ FountainWriter uses the full [Fountain specification](https://fountain.io/syntax
 3. Type your note in the card that appears in the right margin
 4. Click a colour dot to colour-code the note
 5. Press `N` to hide all notes when you want a clean view
+
+### Version diff
+
+1. Click the **split-columns icon** in the toolbar to open diff mode
+2. Choose **Git History** to compare against a prior commit of the current file, or **Other File** to compare against any screenplay in any project
+3. Select a commit or file from the dropdown — the reference column appears to the right
+4. Keep writing; the diff updates live as you type
+5. Green left border = block added in current version; red = removed; amber = changed (word-level diff shown in the reference column)
+6. Click **✕ Close** or the toolbar icon again to exit
 
 ### Git backup
 
