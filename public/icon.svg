@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="#1c1917"/>
+  <!-- Page shadow -->
+  <rect x="30" y="22" width="72" height="88" rx="6" fill="#0f0e0d" opacity="0.4"/>
+  <!-- Page -->
+  <rect x="26" y="18" width="72" height="88" rx="6" fill="#292524"/>
+  <!-- Folded corner -->
+  <path d="M78 18 L98 38 L78 38 Z" fill="#1c1917" opacity="0.6"/>
+  <path d="M78 18 L98 38 L78 38 Z" fill="#f59e0b" opacity="0.15"/>
+  <line x1="78" y1="18" x2="98" y2="38" stroke="#f59e0b" stroke-width="1.5" opacity="0.5"/>
+  <!-- Lines of text -->
+  <!-- Scene heading (amber) -->
+  <rect x="36" y="52" width="48" height="5" rx="2.5" fill="#f59e0b" opacity="0.9"/>
+  <!-- Action lines -->
+  <rect x="36" y="64" width="56" height="3.5" rx="1.75" fill="#e7e5e4" opacity="0.4"/>
+  <rect x="36" y="71" width="44" height="3.5" rx="1.75" fill="#e7e5e4" opacity="0.4"/>
+  <!-- Character (teal, indented) -->
+  <rect x="52" y="82" width="28" height="4" rx="2" fill="#6ee7b7" opacity="0.9"/>
+  <!-- Dialogue (indented) -->
+  <rect x="44" y="90" width="40" height="3.5" rx="1.75" fill="#e7e5e4" opacity="0.35"/>
+  <rect x="44" y="97" width="32" height="3.5" rx="1.75" fill="#e7e5e4" opacity="0.35"/>
+  <!-- Amber accent dot -->
+  <circle cx="64" cy="14" r="4" fill="#f59e0b"/>
+</svg>

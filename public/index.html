@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FountainWriter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* Inline override for hero loading state */
+    .loading-overlay {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; transition: opacity 0.3s;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body class="projects-page">
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div style="font-size:2rem; margin-bottom:1rem;">🎬</div>
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="projects-nav">
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 3a2 2 0 0 1 1 3.5L7 20l-4 1 1-4L18 3.5"/>
+      <line x1="7" y1="20" x2="10" y2="17"/>
+    </svg>
+    FountainWriter
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+      <span id="themeIcon">☀️</span>
+      <span id="themeLabel">Light</span>
+    </button>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main class="projects-main">
+  <div class="projects-header">
+    <div>
+      <h1>Your Screenplays</h1>
+      <div class="subtitle" id="projectCount">Loading projects…</div>
+    </div>
+    <div class="ml-auto">
+      <button class="btn btn-primary" id="newProjectBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Project
+      </button>
+    </div>
+  </div>
+
+  <div class="projects-grid" id="projectsGrid">
+    <!-- populated by JS -->
+  </div>
+</main>
+
+<!-- New Project Modal -->
+<div class="modal-backdrop" id="newProjectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>New Screenplay</h2>
+      <button class="btn-icon btn-ghost" id="closeModalBtn" title="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Import drop zone -->
+      <div id="importDropZone" class="import-drop-zone">
+        <input type="file" id="importFileInput" accept=".fountain" style="display:none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span id="importDropLabel">Import existing <strong>.fountain</strong> file — or fill in the form below</span>
+        <button class="btn btn-ghost btn-sm" id="importBrowseBtn" type="button">Browse</button>
+      </div>
+      <div id="importedFileBanner" class="imported-file-banner" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span id="importedFileName"></span>
+        <button class="btn-icon" id="clearImportBtn" title="Remove import" style="background:none;border:none;color:var(--text-3);margin-left:auto;cursor:pointer;font-size:14px">✕</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="projectName">Project ID</label>
+          <input type="text" id="projectName" placeholder="my-screenplay" pattern="[a-zA-Z0-9_-]+" required>
+          <div class="form-hint">Letters, numbers, hyphens only</div>
+        </div>
+        <div class="form-group">
+          <label for="scriptTitle">Script Title</label>
+          <input type="text" id="scriptTitle" placeholder="The Untitled Project">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="scriptAuthor">Written by</label>
+          <input type="text" id="scriptAuthor" placeholder="Your Name">
+        </div>
+        <div class="form-group">
+          <label for="scriptCredit">Credit</label>
+          <select id="scriptCredit">
+            <option value="Written by">Written by</option>
+            <option value="Original Screenplay by">Original Screenplay</option>
+            <option value="Story and Screenplay by">Story &amp; Screenplay</option>
+            <option value="Based on a novel by">Based on a Novel</option>
+            <option value="Based on a true story">Based on a True Story</option>
+            <option value="An original story by">An Original Story</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="scriptSource">Source (optional)</label>
+        <input type="text" id="scriptSource" placeholder="Based on the novel by…">
+      </div>
+      <div class="form-group">
+        <label for="scriptContact">Contact (optional)</label>
+        <input type="text" id="scriptContact" placeholder="email or agency">
+      </div>
+
+      <!-- Live title page preview -->
+      <div class="title-page-preview" id="titlePagePreview">
+        <div class="tp-title" id="previewTitle">Untitled</div>
+        <div class="tp-credit" id="previewCredit">Written by</div>
+        <div class="tp-author" id="previewAuthor">—</div>
+        <div class="tp-source" id="previewSource" style="display:none"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelModalBtn">Cancel</button>
+      <button class="btn btn-primary" id="createProjectBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Create Project
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal-backdrop" id="deleteModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2>Delete Project</h2>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-2);font-size:0.875rem;line-height:1.6">
+        Are you sure you want to delete <strong id="deleteProjectName" style="color:var(--text)"></strong>?<br>
+        This will permanently delete the project and all its git history.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelDeleteBtn">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn">Delete Project</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="/js/projects.js"></script>
+</body>
+</html>
