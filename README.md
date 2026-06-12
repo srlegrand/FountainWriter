@@ -1,4 +1,4 @@
-# FountainWriter
+# [FountainWriter](https://github.com/srlegrand/FountainWriter)
 
 A sleek, web-based screenplay editor that works natively with the [Fountain](https://fountain.io) format. Built for writers who want a distraction-free, professional writing environment with automatic git backup.
 
