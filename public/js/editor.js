@@ -863,19 +863,15 @@ function renderAllNotes() {
   const pageEl = document.getElementById('screenplayPage');
 
   for (const note of state.notes) {
-    // Re-apply mark if block still exists and text matches
     const block = blocks[note.blockIndex];
     if (block && note.highlightText) {
       applyMarkToBlock(block, note.highlightText, note.id, note.color);
     }
-
-    // Create note card
-    const card = createNoteCard(note);
-    column.appendChild(card);
-
-    // Position it
-    positionNoteCard(card, note, blocks, pageEl);
+    column.appendChild(createNoteCard(note));
   }
+
+  // Position all cards together so the de-overlap pass can see all heights
+  positionAllNoteCards();
 }
 
 function applyMarkToBlock(block, text, noteId, color) {
@@ -966,29 +962,64 @@ function createNoteCard(note) {
   return card;
 }
 
-function positionNoteCard(card, note, blocks, pageEl) {
+function idealNoteTop(note, blocks, pageEl) {
   const block = blocks[note.blockIndex];
-  if (!block) {
-    card.style.top = '0px';
-    return;
-  }
-  // blockRect.top - pageRect.top cancels out scroll offset, giving the
-  // block's position relative to the page element regardless of scroll.
-  // The note card is position:absolute inside notes-column (same scroll
-  // container), so this value is the correct top directly.
+  if (!block) return 0;
   const pageRect = pageEl.getBoundingClientRect();
   const blockRect = block.getBoundingClientRect();
-  const relTop = blockRect.top - pageRect.top;
-  card.style.top = `${Math.max(0, relTop)}px`;
+  return Math.max(0, blockRect.top - pageRect.top);
 }
 
 function positionAllNoteCards() {
   const blocks = getAllBlocks();
-  const pageEl = document.getElementById('screenplayPage');
-  document.querySelectorAll('.note-card').forEach(card => {
+  const pageEl  = document.getElementById('screenplayPage');
+  const domCards = [...document.querySelectorAll('.note-card')];
+  if (!domCards.length) return;
+
+  const GAP = 8;
+
+  // Build items sorted by anchor (ideal) position
+  const items = domCards.map(card => {
     const note = state.notes.find(n => n.id === card.dataset.noteId);
-    if (note) positionNoteCard(card, note, blocks, pageEl);
-  });
+    const ideal = note ? idealNoteTop(note, blocks, pageEl) : 0;
+    return { card, ideal, top: ideal, height: Math.max(card.offsetHeight || 0, 80) };
+  }).sort((a, b) => a.ideal - b.ideal);
+
+  // Forward pass — push cards down until no overlap
+  for (let i = 1; i < items.length; i++) {
+    const minTop = items[i - 1].top + items[i - 1].height + GAP;
+    if (items[i].top < minTop) items[i].top = minTop;
+  }
+
+  // Centering pass — for each cluster of cards that got pushed together,
+  // shift the whole cluster up so it straddles its collective anchor midpoint
+  let i = 0;
+  while (i < items.length) {
+    // Grow the cluster while consecutive cards are still touching
+    let j = i;
+    while (j + 1 < items.length &&
+           items[j].top + items[j].height + GAP > items[j + 1].ideal) {
+      j++;
+    }
+
+    if (j > i) {
+      const cluster = items.slice(i, j + 1);
+      const idealMid = cluster.reduce((s, it) => s + it.ideal + it.height / 2, 0) / cluster.length;
+      const currMid  = (cluster[0].top + cluster[cluster.length - 1].top + cluster[cluster.length - 1].height) / 2;
+      const shiftUp  = Math.max(0, currMid - idealMid);
+
+      if (shiftUp > 0) {
+        const floor = i > 0 ? items[i - 1].top + items[i - 1].height + GAP : 0;
+        const actual = Math.min(shiftUp, cluster[0].top - floor);
+        if (actual > 0) cluster.forEach(it => { it.top -= actual; });
+      }
+    }
+
+    i = j + 1;
+  }
+
+  // Apply final positions
+  items.forEach(({ card, top }) => { card.style.top = `${Math.max(0, top)}px`; });
 }
 
 function highlightNoteCard(noteId) {
@@ -1070,11 +1101,9 @@ function createNoteFromSelection() {
   state.notes.push(note);
   saveNotes();
 
-  // Render the new card
-  const column = document.getElementById('notesColumn');
-  const card = createNoteCard(note);
-  column.appendChild(card);
-  positionNoteCard(card, note, getAllBlocks(), document.getElementById('screenplayPage'));
+  // Render the new card then re-run layout so existing cards shift if needed
+  document.getElementById('notesColumn').appendChild(createNoteCard(note));
+  positionAllNoteCards();
 
   // Focus note body for immediate typing
   setTimeout(() => {
