@@ -69,7 +69,7 @@ A sleek, web-based screenplay editor that works natively with the [Fountain](htt
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/FountainWriter.git
+git clone https://github.com/srlegrand/FountainWriter.git
 cd FountainWriter
 
 # 2. Install dependencies
