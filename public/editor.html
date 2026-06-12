@@ -87,24 +87,26 @@
     </div>
     </div>
 
-    <!-- Diff source bar (hidden until diff mode active) -->
-    <div class="diff-bar" id="diffBar">
-      <div class="diff-bar-tabs">
-        <button class="diff-bar-tab active" id="diffTabGit">Git History</button>
-        <button class="diff-bar-tab" id="diffTabFile">Other File</button>
-      </div>
-      <div class="diff-bar-sep"></div>
-      <div class="diff-bar-controls" id="diffBarGit">
-        <select class="diff-select" id="diffCommitSelect"><option value="">Loading…</option></select>
-      </div>
-      <div class="diff-bar-controls" id="diffBarFile" style="display:none">
-        <select class="diff-select" id="diffProjectSelect"><option value="">Project…</option></select>
-        <select class="diff-select" id="diffFileSelect"><option value="">File…</option></select>
-      </div>
-      <span class="diff-bar-label" id="diffBarLabel"></span>
-      <button class="diff-bar-close" id="diffCloseBtn">✕ Close</button>
-    </div>
   </header>
+
+  <!-- Comparison toolbar (visible only in diff mode) -->
+  <div class="compare-toolbar" id="compareToolbar">
+    <div class="cmp-toolbar-side">
+      <span class="cmp-col-badge current">CURRENT</span>
+      <span class="cmp-col-filename" id="cmpCurrentFilename"></span>
+    </div>
+    <div class="cmp-toolbar-center">
+      <button class="cmp-nav-btn" id="cmpPrevBtn" title="Previous change (Alt+Up)">&#9664; Prev</button>
+      <span class="cmp-change-count" id="cmpChangeCount">— changes</span>
+      <button class="cmp-nav-btn" id="cmpNextBtn" title="Next change (Alt+Down)">Next &#9654;</button>
+    </div>
+    <div class="cmp-toolbar-side" style="justify-content:flex-end">
+      <span class="cmp-col-badge reference">REFERENCE</span>
+      <span class="cmp-col-filename" id="cmpRefFilename"></span>
+      <button class="cmp-source-btn" id="cmpChangeSourceBtn">Change source…</button>
+      <button class="cmp-close-btn" id="cmpCloseBtn">&#10005; Close comparison</button>
+    </div>
+  </div>
 
   <!-- Left Sidebar: Scene Navigator -->
   <aside class="editor-sidebar" id="leftSidebar">
@@ -196,6 +198,50 @@
       </button>
     </div>
   </aside>
+
+  <!-- Compare Screenplays Dialog -->
+  <div class="modal-backdrop" id="compareModal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Compare Screenplays</h2>
+        <button class="btn-icon btn-ghost" id="closeCompareModalBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom:1.25rem">
+          <label>Current file</label>
+          <div style="font-size:0.85rem;color:var(--text-2);padding:0.4rem 0" id="cmpCurrentLabel">—</div>
+        </div>
+        <div class="form-group">
+          <label>Compare against</label>
+          <div class="cmp-source-options">
+            <label class="cmp-radio-row" id="cmpRadioGit">
+              <input type="radio" name="cmpSource" value="git" checked>
+              <span>Earlier version of this file (git history)</span>
+            </label>
+            <div class="cmp-sub-controls" id="cmpGitControls">
+              <select id="cmpCommitSelect" class="cmp-select">
+                <option value="">Loading commits…</option>
+              </select>
+            </div>
+            <label class="cmp-radio-row" id="cmpRadioFile" style="margin-top:0.75rem">
+              <input type="radio" name="cmpSource" value="file">
+              <span>Another screenplay</span>
+            </label>
+            <div class="cmp-sub-controls" id="cmpFileControls" style="display:none">
+              <select id="cmpProjectSelect" class="cmp-select"><option value="">Select project…</option></select>
+              <select id="cmpFileSelect" class="cmp-select" style="margin-top:0.4rem"><option value="">Select file…</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelCompareBtn">Cancel</button>
+        <button class="btn btn-primary" id="doCompareBtn">Compare →</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Status Bar -->
   <footer class="editor-statusbar">

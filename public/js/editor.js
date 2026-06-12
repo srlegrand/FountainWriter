@@ -1631,6 +1631,9 @@ function renderDiff() {
 
   // Build reference page
   buildRefPage(diff);
+
+  // Update compare toolbar navigation
+  updateCmpNav();
 }
 
 function buildRefPage(diff) {
@@ -1724,30 +1727,32 @@ async function loadDiffReference() {
   } catch (e) { console.error('Diff load:', e); }
 }
 
-async function populateDiffCommits() {
+async function populateDiffCommits(targetId = 'cmpCommitSelect') {
   try {
     const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/log`);
     if (!r.ok) return;
     const log = await r.json();
-    const sel = document.getElementById('diffCommitSelect');
-    sel.innerHTML = '<option value="">Select version…</option>';
+    const sel = document.getElementById(targetId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Select a version…</option>';
     log.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.hash;
-      const d = new Date(c.date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-      opt.textContent = `${c.hash.slice(0,7)} · ${d} · ${c.message.slice(0,40)}`;
+      const d = new Date(c.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+      opt.textContent = `${c.hash.slice(0,7)}  ·  ${d}  ·  ${c.message.slice(0,45)}`;
       sel.appendChild(opt);
     });
   } catch {}
 }
 
-async function populateDiffProjects() {
+async function populateDiffProjects(projectSelectId = 'cmpProjectSelect', fileSelectId = 'cmpFileSelect') {
   try {
     const r = await fetch(`${API}/projects`);
     if (!r.ok) return;
     const projects = await r.json();
-    const sel = document.getElementById('diffProjectSelect');
-    sel.innerHTML = '<option value="">Project…</option>';
+    const sel = document.getElementById(projectSelectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Select project…</option>';
     projects.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.name;
@@ -1755,17 +1760,18 @@ async function populateDiffProjects() {
       if (p.name === state.projectName) opt.selected = true;
       sel.appendChild(opt);
     });
-    if (state.projectName) loadDiffFileList(state.projectName);
+    if (state.projectName) loadDiffFileList(state.projectName, fileSelectId);
   } catch {}
 }
 
-async function loadDiffFileList(projectName) {
+async function loadDiffFileList(projectName, fileSelectId = 'cmpFileSelect') {
   try {
     const r = await fetch(`${API}/projects/${encodeURIComponent(projectName)}/files`);
     if (!r.ok) return;
     const files = await r.json();
-    const sel = document.getElementById('diffFileSelect');
-    sel.innerHTML = '<option value="">File…</option>';
+    const sel = document.getElementById(fileSelectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Select file…</option>';
     files.forEach(f => {
       const opt = document.createElement('option');
       opt.value = f.fileName;
@@ -1776,11 +1782,18 @@ async function loadDiffFileList(projectName) {
 }
 
 function openDiffMode() {
-  diffState.active = true;
-  document.body.classList.add('diff-mode');
-  document.getElementById('diffBtn').classList.add('active');
-  populateDiffCommits();
-  if (diffState.sourceType === 'file') populateDiffProjects();
+  // Populate commit list in dialog
+  populateDiffCommits('cmpCommitSelect');
+  // Set current file label in dialog
+  document.getElementById('cmpCurrentLabel').textContent =
+    (state.titlePage?.title || state.fileName || 'Current file');
+  document.getElementById('cmpCurrentFilename').textContent = state.fileName || '';
+  // Reset to git tab
+  document.querySelector('input[name="cmpSource"][value="git"]').checked = true;
+  document.getElementById('cmpGitControls').style.display = '';
+  document.getElementById('cmpFileControls').style.display = 'none';
+  // Open modal
+  document.getElementById('compareModal').classList.add('open');
 }
 
 function closeDiffMode() {
@@ -1788,11 +1801,74 @@ function closeDiffMode() {
   document.body.classList.remove('diff-mode');
   document.getElementById('diffBtn').classList.remove('active');
   // Clear annotations
-  getAllBlocks().forEach(b => delete b.dataset.diff);
+  getAllBlocks().forEach(b => { delete b.dataset.diff; b.classList.remove('cmp-focused'); });
   document.getElementById('diffRefBlocks').innerHTML = '';
   document.getElementById('diffRefTitleBlock').innerHTML = '';
   document.getElementById('diffRefStats').textContent = '';
   diffState.refBlocks = [];
+  cmpChangedBlocks = [];
+  cmpChangeIndex = -1;
+  document.getElementById('cmpChangeCount').textContent = '— changes';
+}
+
+// ── Change navigation ──────────────────────────────────────────
+
+let cmpChangedBlocks = [];
+let cmpChangeIndex  = -1;
+
+function updateCmpNav() {
+  const blocks = getAllBlocks().filter(b => b.dataset.diff && b.dataset.diff !== 'equal');
+  cmpChangedBlocks = blocks;
+  const n = blocks.length;
+  document.getElementById('cmpChangeCount').textContent =
+    n === 0 ? 'No differences' : `${n} change${n === 1 ? '' : 's'}`;
+  document.getElementById('cmpPrevBtn').disabled = n === 0;
+  document.getElementById('cmpNextBtn').disabled = n === 0;
+  if (cmpChangeIndex >= n) cmpChangeIndex = n - 1;
+}
+
+function cmpScrollTo(idx) {
+  if (!cmpChangedBlocks.length) return;
+  cmpChangeIndex = ((idx % cmpChangedBlocks.length) + cmpChangedBlocks.length) % cmpChangedBlocks.length;
+  cmpChangedBlocks[cmpChangeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Briefly highlight
+  cmpChangedBlocks.forEach((b, i) => b.classList.toggle('cmp-focused', i === cmpChangeIndex));
+}
+
+async function loadDiffReferenceFromState() {
+  const type = diffState.sourceType;
+  let content = null, notes = [], label = '';
+  try {
+    if (type === 'git') {
+      const commit = diffState._pendingCommit;
+      const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/file?commit=${encodeURIComponent(commit)}&file=${encodeURIComponent(state.fileName)}`);
+      if (!r.ok) { toast('Could not load that version', 'error'); return; }
+      const d = await r.json();
+      content = d.content; notes = d.notes || [];
+      // Build a nice label from the commit select
+      const opts = [...document.getElementById('cmpCommitSelect').options];
+      const opt  = opts.find(o => o.value === commit);
+      label = opt ? opt.text : commit.slice(0,7);
+    } else {
+      const proj = diffState._pendingProject;
+      const file = diffState._pendingFile;
+      const [cr, nr] = await Promise.all([
+        fetch(`${API}/projects/${encodeURIComponent(proj)}/content?file=${encodeURIComponent(file)}`),
+        fetch(`${API}/projects/${encodeURIComponent(proj)}/notes?file=${encodeURIComponent(file)}`)
+      ]);
+      if (!cr.ok) { toast('Could not load that file', 'error'); return; }
+      const d = await cr.json();
+      content = d.content; notes = nr.ok ? await nr.json() : [];
+      label = proj === state.projectName ? file : `${proj} / ${file}`;
+    }
+    const parsed = Fountain.parse(content);
+    diffState.refBlocks    = parsed.blocks;
+    diffState.refNotes     = notes;
+    diffState.refLabel     = label;
+    diffState.refTitlePage = parsed.titlePage || {};
+    document.getElementById('cmpRefFilename').textContent = label;
+    renderDiff();
+  } catch (e) { console.error('Compare load:', e); toast('Error loading comparison', 'error'); }
 }
 
 // ── Git Graph Panel ──────────────────────────────────────────
@@ -1953,11 +2029,15 @@ function renderGGPGraph() {
           label: 'Compare to current',
           icon: '⧉',
           action: () => {
-            if (!diffState.active) openDiffMode();
-            populateDiffCommits().then(() => {
-              document.getElementById('diffCommitSelect').value = c.hash;
-              loadDiffReference();
-            });
+            openDiffMode();
+            // After modal opens, pre-select this commit
+            setTimeout(() => {
+              const sel = document.getElementById('cmpCommitSelect');
+              if (sel) {
+                const opt = [...sel.options].find(o => o.value === c.hash);
+                if (opt) sel.value = c.hash;
+              }
+            }, 100);
           }
         },
         {
@@ -2088,7 +2168,7 @@ document.getElementById('blocksContainer').addEventListener('contextmenu', e => 
     {
       label: 'Compare versions…',
       icon: '⧉',
-      action: () => { diffState.active ? closeDiffMode() : openDiffMode(); }
+      action: () => openDiffMode()
     },
     '---',
     { label: 'Cut',  hint: 'Ctrl+X', action: () => document.execCommand('cut') },
@@ -2113,20 +2193,27 @@ function fileContextMenu(e, fileName) {
       label: 'Compare to current…',
       icon: '⧉',
       action: () => {
-        if (!diffState.active) openDiffMode();
-        diffState.sourceType = 'file';
-        document.getElementById('diffTabFile').classList.add('active');
-        document.getElementById('diffTabGit').classList.remove('active');
-        document.getElementById('diffBarGit').style.display = 'none';
-        document.getElementById('diffBarFile').style.display = '';
-        populateDiffProjects().then(() => {
-          document.getElementById('diffProjectSelect').value = state.projectName;
-          loadDiffFileList(state.projectName).then(() => {
-            document.getElementById('diffFileSelect').value = fileName;
-            loadDiffReference();
-          });
-        });
         closeFileSwitcher();
+        openDiffMode();
+        // Switch to "file" tab and pre-select this file
+        setTimeout(() => {
+          const fileRadio = document.querySelector('input[name="cmpSource"][value="file"]');
+          if (fileRadio) {
+            fileRadio.checked = true;
+            fileRadio.dispatchEvent(new Event('change'));
+            // After populate completes, pre-select project and file
+            setTimeout(() => {
+              const projSel = document.getElementById('cmpProjectSelect');
+              if (projSel) {
+                projSel.value = state.projectName;
+                loadDiffFileList(state.projectName, 'cmpFileSelect').then(() => {
+                  const fileSel = document.getElementById('cmpFileSelect');
+                  if (fileSel) fileSel.value = fileName;
+                });
+              }
+            }, 300);
+          }
+        }, 100);
       }
     },
     '---',
@@ -2282,31 +2369,80 @@ document.getElementById('themeToggleSettings').addEventListener('click', () => {
 // Notes toggle button
 document.getElementById('toggleNotesBtn').addEventListener('click', toggleNotes);
 
-// Diff mode
+// Diff mode — toolbar button opens modal
 document.getElementById('diffBtn').addEventListener('click', () => {
   diffState.active ? closeDiffMode() : openDiffMode();
 });
-document.getElementById('diffCloseBtn').addEventListener('click', closeDiffMode);
 
-document.getElementById('diffTabGit').addEventListener('click', () => {
-  diffState.sourceType = 'git';
-  document.getElementById('diffTabGit').classList.add('active');
-  document.getElementById('diffTabFile').classList.remove('active');
-  document.getElementById('diffBarGit').style.display = '';
-  document.getElementById('diffBarFile').style.display = 'none';
-  populateDiffCommits();
+// Compare dialog — close/cancel
+document.getElementById('closeCompareModalBtn').addEventListener('click', () => {
+  document.getElementById('compareModal').classList.remove('open');
 });
-document.getElementById('diffTabFile').addEventListener('click', () => {
-  diffState.sourceType = 'file';
-  document.getElementById('diffTabFile').classList.add('active');
-  document.getElementById('diffTabGit').classList.remove('active');
-  document.getElementById('diffBarGit').style.display = 'none';
-  document.getElementById('diffBarFile').style.display = '';
-  populateDiffProjects();
+document.getElementById('cancelCompareBtn').addEventListener('click', () => {
+  document.getElementById('compareModal').classList.remove('open');
 });
-document.getElementById('diffCommitSelect').addEventListener('change', loadDiffReference);
-document.getElementById('diffProjectSelect').addEventListener('change', e => loadDiffFileList(e.target.value));
-document.getElementById('diffFileSelect').addEventListener('change', loadDiffReference);
+document.getElementById('compareModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('compareModal'))
+    document.getElementById('compareModal').classList.remove('open');
+});
+
+// Source type radio buttons in dialog
+document.querySelectorAll('input[name="cmpSource"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const isGit = document.querySelector('input[name="cmpSource"]:checked').value === 'git';
+    document.getElementById('cmpGitControls').style.display = isGit ? '' : 'none';
+    document.getElementById('cmpFileControls').style.display = isGit ? 'none' : '';
+    if (!isGit && document.getElementById('cmpProjectSelect').options.length <= 1) {
+      populateDiffProjects('cmpProjectSelect', 'cmpFileSelect');
+    }
+  });
+});
+
+// Project → file cascade in dialog
+document.getElementById('cmpProjectSelect').addEventListener('change', e => {
+  loadDiffFileList(e.target.value, 'cmpFileSelect');
+});
+
+// Compare button — loads reference and opens comparison view
+document.getElementById('doCompareBtn').addEventListener('click', async () => {
+  const sourceType = document.querySelector('input[name="cmpSource"]:checked').value;
+  diffState.sourceType = sourceType;
+
+  if (sourceType === 'git') {
+    const commit = document.getElementById('cmpCommitSelect').value;
+    if (!commit) { toast('Please select a version', 'error'); return; }
+    diffState._pendingCommit = commit;
+  } else {
+    const proj = document.getElementById('cmpProjectSelect').value;
+    const file = document.getElementById('cmpFileSelect').value;
+    if (!proj || !file) { toast('Please select a project and file', 'error'); return; }
+    diffState._pendingProject = proj;
+    diffState._pendingFile = file;
+  }
+
+  document.getElementById('compareModal').classList.remove('open');
+
+  // Activate diff mode
+  diffState.active = true;
+  document.body.classList.add('diff-mode');
+  document.getElementById('diffBtn').classList.add('active');
+  document.getElementById('cmpCurrentFilename').textContent = state.fileName || '';
+
+  await loadDiffReferenceFromState();
+});
+
+// Comparison toolbar navigation
+document.getElementById('cmpPrevBtn').addEventListener('click', () => cmpScrollTo(cmpChangeIndex - 1));
+document.getElementById('cmpNextBtn').addEventListener('click', () => cmpScrollTo(cmpChangeIndex + 1));
+document.getElementById('cmpCloseBtn').addEventListener('click', closeDiffMode);
+document.getElementById('cmpChangeSourceBtn').addEventListener('click', () => openDiffMode());
+
+// Alt+Up / Alt+Down for change navigation
+document.addEventListener('keydown', e => {
+  if (!diffState.active) return;
+  if (e.altKey && e.key === 'ArrowUp')   { e.preventDefault(); cmpScrollTo(cmpChangeIndex - 1); }
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); cmpScrollTo(cmpChangeIndex + 1); }
+});
 
 // ── Git Graph Panel event wiring ──────────────────────────────
 document.getElementById('gitGraphToggleBtn').addEventListener('click', () => {
@@ -2369,22 +2505,20 @@ document.getElementById('ggpPopoverBranchBtn').addEventListener('click', () => {
   document.getElementById('ggpBranchNameInput').focus();
 });
 
-// Compare commit (open diff mode)
+// Compare commit via git graph popover (opens modal with commit pre-selected)
 document.getElementById('ggpPopoverDiffBtn').addEventListener('click', () => {
   const hash = GGP.selectedHash;
   if (!hash) return;
   document.getElementById('ggpCommitPopover').style.display = 'none';
-  if (!diffState.active) openDiffMode();
-  const sel = document.getElementById('diffCommitSelect');
-  if ([...sel.options].some(o => o.value === hash)) {
-    sel.value = hash;
-    loadDiffReference();
-  } else {
-    populateDiffCommits().then(() => {
-      sel.value = hash;
-      loadDiffReference();
-    });
-  }
+  openDiffMode();
+  // Pre-select the commit after modal & populate completes
+  setTimeout(() => {
+    const sel = document.getElementById('cmpCommitSelect');
+    if (sel) {
+      const opt = [...sel.options].find(o => o.value === hash);
+      if (opt) sel.value = hash;
+    }
+  }, 100);
 });
 
 // Branch checkout via header select

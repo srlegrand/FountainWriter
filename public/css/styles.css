@@ -621,19 +621,26 @@ input:focus, textarea:focus, select:focus {
 ═══════════════════════════════════════════════════════════════ */
 .editor-layout {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 52px 0px 1fr auto;
   grid-template-columns: var(--sidebar-left-w, 220px) 1fr 220px;
   height: 100vh;
   overflow: hidden;
 }
+body.diff-mode .editor-layout { grid-template-rows: 52px 44px 1fr auto; }
+
+/* Explicit row assignment so the 0px toolbar row never breaks auto-placement */
+.editor-topbar    { grid-row: 1; }
+.compare-toolbar  { grid-row: 2; grid-column: 1 / -1; }
+.editor-sidebar,
+.editor-main      { grid-row: 3; }
+.editor-statusbar { grid-row: 4; grid-column: 1 / -1; }
 
 /* Top bar */
 .editor-topbar {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  height: auto;
-  min-height: 52px;
+  height: 52px;
   padding: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -1464,25 +1471,6 @@ body.focus-mode .git-graph-panel { display: none !important; }
 .remote-preset-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Diff ──────────────────────────────────────────────────────── */
-.diff-bar {
-  display: none;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-body.diff-mode .diff-bar { display: flex; }
-.diff-bar-tabs { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-sm); padding: 2px; }
-.diff-bar-tab { background: none; border: none; padding: 0.2rem 0.6rem; font-size: 0.75rem; font-family: var(--font-ui); color: var(--text-3); border-radius: var(--r-sm); cursor: pointer; }
-.diff-bar-tab.active { background: var(--surface-3); color: var(--text); }
-.diff-bar-sep { width: 1px; height: 20px; background: var(--border-2); margin: 0 0.25rem; }
-.diff-select { background: var(--surface-2); border: 1px solid var(--border-2); color: var(--text); border-radius: var(--r-sm); padding: 0.25rem 0.5rem; font-size: 0.78rem; font-family: var(--font-ui); cursor: pointer; max-width: 220px; }
-.diff-bar-label { font-size: 0.72rem; color: var(--text-3); font-family: var(--font-ui); margin-left: 0.25rem; }
-.diff-bar-close { margin-left: auto; background: none; border: 1px solid var(--border-2); color: var(--text-3); border-radius: var(--r-sm); padding: 0.2rem 0.6rem; font-size: 0.75rem; font-family: var(--font-ui); cursor: pointer; }
-.diff-bar-close:hover { border-color: var(--c-transition); color: var(--c-transition); }
 
 /* Diff block annotations */
 .fountain-block[data-diff="added"] { border-left: 3px solid #22c55e; padding-left: calc(0px); background: rgba(34,197,94,0.07); margin-left: -3px; }
@@ -1735,6 +1723,74 @@ body.diff-mode .diff-ref-page { display: block; }
 .ctx-hint { font-size: 0.7rem; color: var(--text-4); white-space: nowrap; }
 .ctx-sep { height: 1px; background: var(--border); margin: 3px 4px; }
 
+/* ── Compare dialog + toolbar ──────────────────────────────── */
+.cmp-source-options { display: flex; flex-direction: column; }
+.cmp-radio-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.85rem; color: var(--text); cursor: pointer; padding: 0.25rem 0;
+}
+.cmp-radio-row input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
+.cmp-sub-controls { padding-left: 1.5rem; margin-top: 0.35rem; }
+.cmp-select {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--border-2);
+  color: var(--text); border-radius: var(--r-sm); padding: 0.35rem 0.5rem;
+  font-size: 0.82rem; font-family: var(--font-ui); cursor: pointer;
+  display: block;
+}
+
+.compare-toolbar {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  background: var(--surface-2);
+  border-bottom: 2px solid var(--accent);
+  padding: 0 1rem;
+  height: 0;
+  gap: 0;
+  z-index: 190;
+  overflow: hidden;
+  visibility: hidden;
+}
+body.diff-mode .compare-toolbar { height: 44px; visibility: visible; }
+
+.cmp-toolbar-side {
+  display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0;
+}
+.cmp-col-badge {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 3px;
+  flex-shrink: 0;
+}
+.cmp-col-badge.current   { background: rgba(34,197,94,0.2);  color: #22c55e; }
+.cmp-col-badge.reference { background: rgba(239,68,68,0.2);  color: #ef4444; }
+.cmp-col-filename { font-size: 0.78rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.cmp-toolbar-center {
+  display: flex; align-items: center; gap: 0.75rem;
+  flex-shrink: 0; padding: 0 1rem;
+}
+.cmp-nav-btn {
+  background: var(--surface-3); border: 1px solid var(--border-2);
+  color: var(--text-2); border-radius: var(--r-sm);
+  padding: 0.2rem 0.65rem; font-size: 0.78rem; font-family: var(--font-ui); cursor: pointer;
+}
+.cmp-nav-btn:hover { background: var(--surface-4); color: var(--text); }
+.cmp-nav-btn:disabled { opacity: 0.35; cursor: default; }
+.cmp-change-count { font-size: 0.78rem; color: var(--text-3); white-space: nowrap; min-width: 80px; text-align: center; }
+.cmp-source-btn {
+  background: none; border: 1px solid var(--border-2); color: var(--text-3);
+  border-radius: var(--r-sm); padding: 0.2rem 0.6rem; font-size: 0.75rem;
+  font-family: var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.cmp-source-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cmp-close-btn {
+  background: none; border: 1px solid var(--border-2); color: var(--text-2);
+  border-radius: var(--r-sm); padding: 0.2rem 0.65rem; font-size: 0.78rem;
+  font-family: var(--font-ui); cursor: pointer; white-space: nowrap; margin-left: 0.25rem;
+}
+.cmp-close-btn:hover { border-color: var(--red); color: var(--red); }
+
+.fountain-block.cmp-focused { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* Print / export styles */
 @media print {
   body { background: white; }
@@ -1743,7 +1799,7 @@ body.diff-mode .diff-ref-page { display: block; }
   .editor-layout { display: block; }
   .page-and-notes { display: block; }
   .notes-column, .floating-note-btn { display: none !important; }
-  .diff-ref-page, .diff-bar { display: none !important; }
+  .diff-ref-page, .compare-toolbar { display: none !important; }
 
 /* Notes visibility toggle */
 body.notes-hidden .notes-column,
