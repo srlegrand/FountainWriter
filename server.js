@@ -352,6 +352,24 @@ app.get('/api/projects/:name/git/log', async (req, res) => {
   }
 });
 
+// GET file + notes at a specific git commit
+app.get('/api/projects/:name/git/file', async (req, res) => {
+  try {
+    const { commit, file } = req.query;
+    if (!commit || !file) return res.status(400).json({ error: 'commit and file required' });
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    const content = await git.show([`${commit}:${file}`]);
+    let notes = [];
+    try {
+      const nf = file.replace('.fountain', '.notes.json');
+      const raw = await git.show([`${commit}:${nf}`]);
+      notes = JSON.parse(raw);
+    } catch {}
+    res.json({ content, notes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Serve editor for project
 app.get('/editor/:name', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'editor.html'));

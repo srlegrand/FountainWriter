@@ -15,6 +15,7 @@
 
   <!-- Top Bar -->
   <header class="editor-topbar">
+    <div class="topbar-row">
     <div class="topbar-brand" title="FountainWriter">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 3a2 2 0 0 1 1 3.5L7 20l-4 1 1-4L18 3.5"/>
@@ -73,11 +74,35 @@
       <button class="topbar-icon-btn" id="toggleNotesBtn" title="Show/hide notes (N)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
       </button>
+      <button class="topbar-icon-btn" id="diffBtn" title="Compare versions">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/>
+        </svg>
+      </button>
       <div class="topbar-divider"></div>
       <button class="topbar-icon-btn" id="themeToggleBtn" title="Toggle theme">☀️</button>
       <button class="topbar-icon-btn" id="settingsBtn" title="Settings">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
+    </div>
+    </div>
+
+    <!-- Diff source bar (hidden until diff mode active) -->
+    <div class="diff-bar" id="diffBar">
+      <div class="diff-bar-tabs">
+        <button class="diff-bar-tab active" id="diffTabGit">Git History</button>
+        <button class="diff-bar-tab" id="diffTabFile">Other File</button>
+      </div>
+      <div class="diff-bar-sep"></div>
+      <div class="diff-bar-controls" id="diffBarGit">
+        <select class="diff-select" id="diffCommitSelect"><option value="">Loading…</option></select>
+      </div>
+      <div class="diff-bar-controls" id="diffBarFile" style="display:none">
+        <select class="diff-select" id="diffProjectSelect"><option value="">Project…</option></select>
+        <select class="diff-select" id="diffFileSelect"><option value="">File…</option></select>
+      </div>
+      <span class="diff-bar-label" id="diffBarLabel"></span>
+      <button class="diff-bar-close" id="diffCloseBtn">✕ Close</button>
     </div>
   </header>
 
@@ -105,6 +130,15 @@
         </div>
         <!-- Margin notes column -->
         <div class="notes-column" id="notesColumn"></div>
+        <!-- Reference page (diff mode only) -->
+        <div class="diff-ref-page" id="diffRefPage">
+          <div class="diff-ref-header" id="diffRefHeader">
+            <span class="diff-ref-label" id="diffRefLabel">REFERENCE</span>
+            <span class="diff-ref-stats" id="diffRefStats"></span>
+          </div>
+          <div class="diff-ref-title-block" id="diffRefTitleBlock"></div>
+          <div class="diff-ref-blocks" id="diffRefBlocks"></div>
+        </div>
       </div>
     </div>
 

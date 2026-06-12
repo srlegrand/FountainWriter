@@ -266,6 +266,7 @@ function handleInput(e) {
   scheduleSave();
   scheduleStatsUpdate();
   debouncedPageBreaks();
+  debouncedDiff();
 }
 
 function handlePaste(e) {
@@ -1358,6 +1359,291 @@ function toggleNotes() {
   localStorage.setItem('fw-notes-hidden', hidden ? '1' : '');
 }
 
+// ── Diff ──────────────────────────────────────────────────────
+
+const diffState = {
+  active: false,
+  sourceType: 'git',
+  refBlocks: [],
+  refNotes: [],
+  refLabel: '',
+  refTitlePage: {}
+};
+
+const debouncedDiff = debounce(() => { if (diffState.active) renderDiff(); }, 400);
+
+function blockKey(b) {
+  const type = b.type !== undefined ? b.type : (b.dataset?.type || '');
+  const text = b.text !== undefined ? b.text : (b.textContent || '');
+  return type + '\x00' + text.trim();
+}
+
+function lcsBlockDiff(curr, ref) {
+  const m = curr.length, n = ref.length;
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = blockKey(curr[i-1]) === blockKey(ref[j-1])
+        ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && blockKey(curr[i-1]) === blockKey(ref[j-1])) {
+      ops.unshift({ op: 'equal', curr: curr[i-1], ref: ref[j-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({ op: 'removed', ref: ref[j-1] }); j--;
+    } else {
+      ops.unshift({ op: 'added', curr: curr[i-1] }); i--;
+    }
+  }
+
+  // Merge adjacent same-type removed+added → changed
+  const result = [];
+  for (let k = 0; k < ops.length; k++) {
+    if (ops[k].op === 'removed' && k + 1 < ops.length && ops[k+1].op === 'added'
+        && ops[k].ref.type === ops[k+1].curr.type) {
+      result.push({ op: 'changed', curr: ops[k+1].curr, ref: ops[k].ref }); k++;
+    } else {
+      result.push(ops[k]);
+    }
+  }
+  return result;
+}
+
+function wordDiff(currText, refText) {
+  const tok = s => s.split(/(\s+)/);
+  const a = tok(currText), b = tok(refText);
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+      ops.unshift({ op: 'eq', a: a[i-1], b: b[j-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({ op: 'del', b: b[j-1] }); j--;
+    } else {
+      ops.unshift({ op: 'ins', a: a[i-1] }); i--;
+    }
+  }
+
+  let currHtml = '', refHtml = '';
+  for (const op of ops) {
+    if (op.op === 'eq')  { currHtml += escapeHtml(op.a); refHtml += escapeHtml(op.b); }
+    else if (op.op === 'ins') currHtml += `<span class="diff-ins">${escapeHtml(op.a)}</span>`;
+    else refHtml += `<span class="diff-del">${escapeHtml(op.b)}</span>`;
+  }
+  return { currHtml, refHtml };
+}
+
+function renderDiff() {
+  if (!diffState.active || !diffState.refBlocks.length) return;
+
+  const domBlocks = getAllBlocks();
+  const curr = domBlocks.map(b => ({ type: b.dataset.type, text: b.textContent.trim(), el: b }));
+  const ref  = diffState.refBlocks;
+
+  // Reset annotations
+  domBlocks.forEach(b => delete b.dataset.diff);
+
+  const diff = lcsBlockDiff(curr, ref);
+
+  // Annotate current blocks
+  let ci = 0;
+  for (const op of diff) {
+    if (op.op === 'added' || op.op === 'changed' || op.op === 'equal') {
+      if (curr[ci]) curr[ci].el.dataset.diff = op.op;
+      ci++;
+    }
+  }
+
+  // Stats
+  const added   = diff.filter(o => o.op === 'added').length;
+  const removed = diff.filter(o => o.op === 'removed').length;
+  const changed = diff.filter(o => o.op === 'changed').length;
+
+  // Note diff
+  const cnotes = state.notes.length;
+  const rnotes = diffState.refNotes.length;
+  const notesDelta = cnotes - rnotes;
+  let notesStr = '';
+  if (notesDelta !== 0) notesStr = ` · ✏ notes ${notesDelta > 0 ? '+' : ''}${notesDelta}`;
+
+  document.getElementById('diffRefStats').textContent =
+    `+${added} −${removed} ~${changed}${notesStr}`;
+  document.getElementById('diffRefLabel').textContent = `REFERENCE — ${diffState.refLabel}`;
+
+  // Build reference page
+  buildRefPage(diff);
+}
+
+function buildRefPage(diff) {
+  // Title block
+  const tp = diffState.refTitlePage;
+  const titleHtml = tp.title
+    ? `<strong>${escapeHtml(tp.title)}</strong>\n${escapeHtml(tp.author || '')}\n${escapeHtml(tp['draft date'] || tp.draftDate || '')}`
+    : '';
+  document.getElementById('diffRefTitleBlock').innerHTML = titleHtml ? titleHtml.replace(/\n/g, '<br>') : '';
+
+  // Ref blocks
+  const container = document.getElementById('diffRefBlocks');
+  container.innerHTML = '';
+
+  // Note counts by blockIndex in reference
+  const refNoteMap = {};
+  diffState.refNotes.forEach(n => { refNoteMap[n.blockIndex] = (refNoteMap[n.blockIndex] || 0) + 1; });
+
+  let refIdx = 0;
+  for (const op of diff) {
+    if (op.op === 'removed' || op.op === 'changed' || op.op === 'equal') {
+      const block = op.ref;
+      const el = document.createElement('div');
+      el.className = 'diff-ref-block';
+      el.dataset.type  = block.type;
+      el.dataset.diff  = op.op;
+
+      if (op.op === 'changed') {
+        const { refHtml } = wordDiff(op.curr.text, block.text);
+        el.innerHTML = refHtml;
+      } else {
+        el.textContent = block.text;
+      }
+
+      // Note tag
+      const nc = refNoteMap[refIdx];
+      if (nc) {
+        const tag = document.createElement('span');
+        tag.className = 'diff-note-tag';
+        tag.textContent = `✏ ${nc}`;
+        el.appendChild(tag);
+      }
+
+      container.appendChild(el);
+      refIdx++;
+    }
+    if (op.op === 'added') {
+      // Placeholder gap in ref column
+      const el = document.createElement('div');
+      el.className = 'diff-ref-block diff-ref-gap';
+      el.innerHTML = '&nbsp;';
+      container.appendChild(el);
+    }
+  }
+}
+
+async function loadDiffReference() {
+  const type = diffState.sourceType;
+  let content = null, notes = [], label = '';
+  try {
+    if (type === 'git') {
+      const commit = document.getElementById('diffCommitSelect').value;
+      if (!commit) return;
+      const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/file?commit=${encodeURIComponent(commit)}&file=${encodeURIComponent(state.fileName)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      content = d.content; notes = d.notes || [];
+      // Find commit message for label
+      const sel = document.getElementById('diffCommitSelect');
+      label = sel.options[sel.selectedIndex]?.text || commit.slice(0,7);
+    } else {
+      const proj = document.getElementById('diffProjectSelect').value;
+      const file = document.getElementById('diffFileSelect').value;
+      if (!proj || !file) return;
+      const [cr, nr] = await Promise.all([
+        fetch(`${API}/projects/${encodeURIComponent(proj)}/content?file=${encodeURIComponent(file)}`),
+        fetch(`${API}/projects/${encodeURIComponent(proj)}/notes?file=${encodeURIComponent(file)}`)
+      ]);
+      if (!cr.ok) return;
+      const d = await cr.json();
+      content = d.content;
+      notes = nr.ok ? await nr.json() : [];
+      label = proj === state.projectName ? file : `${proj} / ${file}`;
+    }
+    const parsed = Fountain.parse(content);
+    diffState.refBlocks = parsed.blocks;
+    diffState.refNotes  = notes;
+    diffState.refLabel  = label;
+    diffState.refTitlePage = parsed.titlePage || {};
+    renderDiff();
+  } catch (e) { console.error('Diff load:', e); }
+}
+
+async function populateDiffCommits() {
+  try {
+    const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/log`);
+    if (!r.ok) return;
+    const log = await r.json();
+    const sel = document.getElementById('diffCommitSelect');
+    sel.innerHTML = '<option value="">Select version…</option>';
+    log.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.hash;
+      const d = new Date(c.date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      opt.textContent = `${c.hash.slice(0,7)} · ${d} · ${c.message.slice(0,40)}`;
+      sel.appendChild(opt);
+    });
+  } catch {}
+}
+
+async function populateDiffProjects() {
+  try {
+    const r = await fetch(`${API}/projects`);
+    if (!r.ok) return;
+    const projects = await r.json();
+    const sel = document.getElementById('diffProjectSelect');
+    sel.innerHTML = '<option value="">Project…</option>';
+    projects.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      if (p.name === state.projectName) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (state.projectName) loadDiffFileList(state.projectName);
+  } catch {}
+}
+
+async function loadDiffFileList(projectName) {
+  try {
+    const r = await fetch(`${API}/projects/${encodeURIComponent(projectName)}/files`);
+    if (!r.ok) return;
+    const files = await r.json();
+    const sel = document.getElementById('diffFileSelect');
+    sel.innerHTML = '<option value="">File…</option>';
+    files.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.fileName;
+      opt.textContent = f.fileName;
+      sel.appendChild(opt);
+    });
+  } catch {}
+}
+
+function openDiffMode() {
+  diffState.active = true;
+  document.body.classList.add('diff-mode');
+  document.getElementById('diffBtn').classList.add('active');
+  populateDiffCommits();
+  if (diffState.sourceType === 'file') populateDiffProjects();
+}
+
+function closeDiffMode() {
+  diffState.active = false;
+  document.body.classList.remove('diff-mode');
+  document.getElementById('diffBtn').classList.remove('active');
+  // Clear annotations
+  getAllBlocks().forEach(b => delete b.dataset.diff);
+  document.getElementById('diffRefBlocks').innerHTML = '';
+  document.getElementById('diffRefTitleBlock').innerHTML = '';
+  document.getElementById('diffRefStats').textContent = '';
+  diffState.refBlocks = [];
+}
+
 // ── Event Wiring ──────────────────────────────────────────────
 
 // Floating note button
@@ -1498,6 +1784,32 @@ document.getElementById('themeToggleSettings').addEventListener('click', () => {
 
 // Notes toggle button
 document.getElementById('toggleNotesBtn').addEventListener('click', toggleNotes);
+
+// Diff mode
+document.getElementById('diffBtn').addEventListener('click', () => {
+  diffState.active ? closeDiffMode() : openDiffMode();
+});
+document.getElementById('diffCloseBtn').addEventListener('click', closeDiffMode);
+
+document.getElementById('diffTabGit').addEventListener('click', () => {
+  diffState.sourceType = 'git';
+  document.getElementById('diffTabGit').classList.add('active');
+  document.getElementById('diffTabFile').classList.remove('active');
+  document.getElementById('diffBarGit').style.display = '';
+  document.getElementById('diffBarFile').style.display = 'none';
+  populateDiffCommits();
+});
+document.getElementById('diffTabFile').addEventListener('click', () => {
+  diffState.sourceType = 'file';
+  document.getElementById('diffTabFile').classList.add('active');
+  document.getElementById('diffTabGit').classList.remove('active');
+  document.getElementById('diffBarGit').style.display = 'none';
+  document.getElementById('diffBarFile').style.display = '';
+  populateDiffProjects();
+});
+document.getElementById('diffCommitSelect').addEventListener('change', loadDiffReference);
+document.getElementById('diffProjectSelect').addEventListener('change', e => loadDiffFileList(e.target.value));
+document.getElementById('diffFileSelect').addEventListener('change', loadDiffReference);
 
 // Global keyboard shortcuts
 document.addEventListener('keydown', e => {
