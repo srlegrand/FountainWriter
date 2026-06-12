@@ -58,6 +58,49 @@ let state = {
 
 const LINES_PER_PAGE = 55; // A4 at 12pt Courier with standard margins
 
+// ── Context Menu ──────────────────────────────────────────────
+const ctxMenu = (() => {
+  const el = document.createElement('div');
+  el.className = 'ctx-menu';
+  el.style.display = 'none';
+  document.body.appendChild(el);
+
+  function hide() { el.style.display = 'none'; }
+
+  document.addEventListener('click', hide);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+
+  function show(x, y, items) {
+    el.innerHTML = '';
+    for (const item of items) {
+      if (item === '---') {
+        const d = document.createElement('div');
+        d.className = 'ctx-sep';
+        el.appendChild(d);
+        continue;
+      }
+      const btn = document.createElement('button');
+      btn.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.muted ? ' muted' : '');
+      btn.disabled = !!item.disabled;
+      btn.innerHTML = (item.icon ? `<span class="ctx-icon">${item.icon}</span>` : '') +
+                      `<span class="ctx-label">${item.label}</span>` +
+                      (item.hint ? `<span class="ctx-hint">${item.hint}</span>` : '');
+      if (item.action) {
+        btn.addEventListener('click', e => { e.stopPropagation(); hide(); item.action(); });
+      }
+      el.appendChild(btn);
+    }
+
+    el.style.display = 'block';
+    el.style.left = '0'; el.style.top = '0';
+    const r = el.getBoundingClientRect();
+    el.style.left = Math.min(x, window.innerWidth  - r.width  - 8) + 'px';
+    el.style.top  = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  }
+
+  return { show, hide };
+})();
+
 // ── Utilities ─────────────────────────────────────────────────
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
@@ -652,10 +695,28 @@ function updateSceneList() {
       sceneNum++;
       const item = document.createElement('div');
       item.className = 'scene-item';
-      item.innerHTML = `<span class="scene-num">${sceneNum}</span><span class="scene-text">${escapeHtml(el.textContent.trim())}</span>`;
+      const sceneText = el.textContent.trim();
+      item.innerHTML = `<span class="scene-num">${sceneNum}</span><span class="scene-text">${escapeHtml(sceneText)}</span>`;
       item.addEventListener('click', () => {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.focus();
+      });
+      item.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        ctxMenu.show(e.clientX, e.clientY, [
+          { label: sceneText.slice(0, 40), disabled: true, muted: true },
+          '---',
+          {
+            label: 'Jump to scene',
+            icon: '→',
+            action: () => item.click()
+          },
+          {
+            label: 'Copy scene heading',
+            icon: '⎘',
+            action: () => navigator.clipboard.writeText(sceneText).catch(() => {})
+          },
+        ]);
       });
       list.appendChild(item);
     }
@@ -960,6 +1021,38 @@ function createNoteCard(note) {
     renderAllNotes();
   });
 
+  // Context menu
+  card.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const n = state.notes.find(n => n.id === card.dataset.noteId);
+    if (!n) return;
+    const colors = ['amber','green','blue','red','purple'];
+    ctxMenu.show(e.clientX, e.clientY, [
+      ...colors.map(c => ({
+        label: c.charAt(0).toUpperCase() + c.slice(1),
+        icon: n.color === c ? '✓' : '●',
+        action: () => {
+          n.color = c;
+          card.dataset.color = c;
+          saveNotes();
+          renderAllNotes();
+        }
+      })),
+      '---',
+      {
+        label: 'Delete note',
+        icon: '🗑',
+        danger: true,
+        action: () => {
+          state.notes = state.notes.filter(x => x.id !== n.id);
+          saveNotes();
+          renderAllNotes();
+        }
+      },
+    ]);
+  });
+
   return card;
 }
 
@@ -1167,6 +1260,8 @@ function renderFileSwitcher() {
       });
       item.replaceWith(confirmRow);
     });
+    // Context menu on file item
+    item.addEventListener('contextmenu', e => fileContextMenu(e, f));
     list.appendChild(item);
   }
 }
@@ -1848,6 +1943,41 @@ function renderGGPGraph() {
       ${refHtml ? `<div class="ggp-commit-refs">${refHtml}</div>` : ''}
     `;
     row.addEventListener('click', () => selectGGPCommit(c.hash));
+    row.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      ctxMenu.show(e.clientX, e.clientY, [
+        { label: c.message.slice(0, 40), disabled: true, muted: true },
+        '---',
+        {
+          label: 'Compare to current',
+          icon: '⧉',
+          action: () => {
+            if (!diffState.active) openDiffMode();
+            populateDiffCommits().then(() => {
+              document.getElementById('diffCommitSelect').value = c.hash;
+              loadDiffReference();
+            });
+          }
+        },
+        {
+          label: 'Branch from here…',
+          icon: '⑂',
+          action: () => {
+            GGP.fromHash = c.hash;
+            document.getElementById('ggpNewBranchRow').style.display = 'flex';
+            document.getElementById('ggpBranchNameInput').focus();
+            if (!GGP.open) openGGP();
+          }
+        },
+        '---',
+        {
+          label: `Copy hash  ${c.hash.slice(0,7)}`,
+          icon: '⎘',
+          action: () => navigator.clipboard.writeText(c.hash).catch(() => {})
+        },
+      ]);
+    });
     labels.appendChild(row);
   }
 
@@ -1916,6 +2046,99 @@ function closeGGP() {
 
 // ── Event Wiring ──────────────────────────────────────────────
 
+// ── Context menu: screenplay blocks ───────────────────────────
+document.getElementById('blocksContainer').addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const block = e.target.closest('.fountain-block');
+  if (!block) return;
+  const currentType = block.dataset.type || 'action';
+  const typeLabels = {
+    'scene-heading': 'Scene Heading', 'action': 'Action',
+    'character': 'Character', 'dialogue': 'Dialogue',
+    'parenthetical': 'Parenthetical', 'transition': 'Transition',
+    'note': 'Note', 'centered': 'Centered'
+  };
+  const ELEMENT_TYPES = ['scene-heading','action','character','dialogue','parenthetical','transition'];
+
+  ctxMenu.show(e.clientX, e.clientY, [
+    { label: 'Element type', disabled: true, muted: true },
+    ...ELEMENT_TYPES.map(t => ({
+      label: typeLabels[t] || t,
+      icon: t === currentType ? '✓' : '',
+      action: () => {
+        block.dataset.type = t;
+        handleInput({ target: block });
+        saveFile();
+      }
+    })),
+    '---',
+    {
+      label: 'Add note here',
+      icon: '✏',
+      action: () => {
+        const range = document.createRange();
+        range.selectNodeContents(block);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        createNoteFromSelection();
+      }
+    },
+    '---',
+    {
+      label: 'Compare versions…',
+      icon: '⧉',
+      action: () => { diffState.active ? closeDiffMode() : openDiffMode(); }
+    },
+    '---',
+    { label: 'Cut',  hint: 'Ctrl+X', action: () => document.execCommand('cut') },
+    { label: 'Copy', hint: 'Ctrl+C', action: () => document.execCommand('copy') },
+    { label: 'Paste', hint: 'Ctrl+V', action: () => document.execCommand('paste') },
+  ]);
+});
+
+// ── Context menu: file switcher ────────────────────────────────
+function fileContextMenu(e, fileName) {
+  e.preventDefault();
+  e.stopPropagation();
+  const isCurrent = fileName === state.fileName;
+  ctxMenu.show(e.clientX, e.clientY, [
+    {
+      label: isCurrent ? 'Currently open' : 'Open',
+      icon: '📄',
+      disabled: isCurrent,
+      action: () => switchToFile(fileName)
+    },
+    {
+      label: 'Compare to current…',
+      icon: '⧉',
+      action: () => {
+        if (!diffState.active) openDiffMode();
+        diffState.sourceType = 'file';
+        document.getElementById('diffTabFile').classList.add('active');
+        document.getElementById('diffTabGit').classList.remove('active');
+        document.getElementById('diffBarGit').style.display = 'none';
+        document.getElementById('diffBarFile').style.display = '';
+        populateDiffProjects().then(() => {
+          document.getElementById('diffProjectSelect').value = state.projectName;
+          loadDiffFileList(state.projectName).then(() => {
+            document.getElementById('diffFileSelect').value = fileName;
+            loadDiffReference();
+          });
+        });
+        closeFileSwitcher();
+      }
+    },
+    '---',
+    {
+      label: 'Delete…',
+      icon: '🗑',
+      danger: true,
+      action: () => deleteScreenplay(fileName)
+    },
+  ]);
+}
+
 // Floating note button
 floatingNoteBtn.addEventListener('click', createNoteFromSelection);
 document.addEventListener('selectionchange', handleSelectionChange);
@@ -1927,6 +2150,10 @@ window.addEventListener('resize', positionAllNoteCards);
 document.getElementById('fileSwitcherBtn').addEventListener('click', e => {
   e.stopPropagation();
   toggleFileSwitcher();
+});
+// Right-click on file switcher button = context menu for current file
+document.getElementById('fileSwitcherBtn').addEventListener('contextmenu', e => {
+  if (state.fileName) fileContextMenu(e, state.fileName);
 });
 document.getElementById('fsdNewBtn').addEventListener('click', createNewScreenplay);
 document.getElementById('fsdImportBtn').addEventListener('click', triggerEditorImport);
