@@ -10,6 +10,10 @@ A sleek, web-based screenplay editor that works natively with the [Fountain](htt
 
 ![Settings](screenshots/settings_ui_dark.png)
 
+![Diff — dark](screenshots/diff_compare_dark.png)
+
+![Diff — light](screenshots/diff_compare_light.png)
+
 ---
 
 ## Features
