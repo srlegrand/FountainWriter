@@ -1139,12 +1139,68 @@ function renderFileSwitcher() {
     item.innerHTML = `
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span class="fsd-file-name">${escapeHtml(f)}</span>
+      <button class="fsd-file-delete-btn" title="Delete ${escapeHtml(f)}">✕</button>
     `;
     if (f !== current) {
-      item.addEventListener('click', () => switchToFile(f));
+      item.querySelector('.fsd-file-name').addEventListener('click', () => switchToFile(f));
+      item.querySelector('svg').addEventListener('click', () => switchToFile(f));
     }
+    // Delete button — show inline confirm
+    const delBtn = item.querySelector('.fsd-file-delete-btn');
+    delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      // Replace item with confirm row
+      const confirmRow = document.createElement('div');
+      confirmRow.className = 'fsd-file-confirm-row';
+      confirmRow.innerHTML = `
+        <span>Delete "${escapeHtml(f)}"?</span>
+        <button class="fsd-file-confirm-yes">Yes</button>
+        <button class="fsd-file-confirm-no">No</button>
+      `;
+      confirmRow.querySelector('.fsd-file-confirm-yes').addEventListener('click', async ev => {
+        ev.stopPropagation();
+        await deleteScreenplay(f);
+      });
+      confirmRow.querySelector('.fsd-file-confirm-no').addEventListener('click', ev => {
+        ev.stopPropagation();
+        confirmRow.replaceWith(item);
+      });
+      item.replaceWith(confirmRow);
+    });
     list.appendChild(item);
   }
+}
+
+async function deleteScreenplay(fileName) {
+  const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/files?file=${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+  if (r.ok) {
+    toast(`Deleted ${fileName}`, 'success');
+    // Reload file list first so state.allFiles is fresh
+    await loadProjectFileList();
+    if (state.fileName === fileName) {
+      // Switch to another file
+      const remaining = state.allFiles.filter(f => f !== fileName);
+      if (remaining.length) {
+        switchToFile(remaining[0]);
+      } else {
+        window.location.href = '/';
+      }
+    } else {
+      closeFileSwitcher();
+    }
+  } else {
+    toast('Delete failed', 'error');
+  }
+}
+
+async function loadProjectFileList() {
+  try {
+    const res = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/files`);
+    if (!res.ok) return;
+    const files = await res.json();
+    state.allFiles = files.map(f => f.fileName);
+    renderFileSwitcher();
+  } catch {}
 }
 
 function toggleFileSwitcher() {
@@ -1644,6 +1700,220 @@ function closeDiffMode() {
   diffState.refBlocks = [];
 }
 
+// ── Git Graph Panel ──────────────────────────────────────────
+
+const GGP = {
+  open: false,
+  commits: [],
+  selectedHash: null,
+  fromHash: null,
+  panelH: 500,
+  dragging: false,
+  dragStartY: 0,
+  dragStartH: 0,
+};
+const LANE_COLORS = ['#f59e0b','#60a5fa','#34d399','#f472b6','#a78bfa','#fb7185'];
+const GGP_ROW = 44, GGP_LANE = 22, GGP_X0 = 18, GGP_R = 6;
+
+function ggpLaneX(lane) { return GGP_X0 + lane * GGP_LANE + GGP_LANE / 2; }
+function ggpRowY(i) { return i * GGP_ROW + GGP_ROW / 2; }
+
+function layoutGGPCommits(commits) {
+  const laneMap = {};
+  const activeLanes = {};
+  function freeLane() {
+    let l = 0;
+    while (activeLanes[l] !== undefined) l++;
+    return l;
+  }
+  for (const c of commits) {
+    if (laneMap[c.hash] === undefined) {
+      const l = freeLane();
+      laneMap[c.hash] = l;
+      activeLanes[l] = c.hash;
+    }
+    c.lane = laneMap[c.hash];
+    delete activeLanes[c.lane];
+    const parents = c.parents;
+    for (let i = 0; i < parents.length; i++) {
+      if (laneMap[parents[i]] === undefined) {
+        if (i === 0) {
+          laneMap[parents[i]] = c.lane;
+          activeLanes[c.lane] = parents[i];
+        } else {
+          const nl = freeLane();
+          laneMap[parents[i]] = nl;
+          activeLanes[nl] = parents[i];
+        }
+      }
+    }
+  }
+  return commits;
+}
+
+function renderGGPGraph() {
+  const commits = GGP.commits;
+  if (!commits.length) return;
+
+  const indexMap = {};
+  commits.forEach((c, i) => { indexMap[c.hash] = i; });
+
+  const maxLane = commits.reduce((m, c) => Math.max(m, c.lane), 0);
+  const svgW = GGP_X0 + (maxLane + 1) * GGP_LANE + GGP_X0;
+  const svgH = commits.length * GGP_ROW;
+  const labelLeft = svgW + 4;
+
+  const svg = document.getElementById('ggpSvg');
+  svg.setAttribute('width', svgW);
+  svg.setAttribute('height', svgH);
+  svg.style.width = svgW + 'px';
+  svg.style.height = svgH + 'px';
+
+  let lines = '', dots = '';
+
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    const x1 = ggpLaneX(c.lane), y1 = ggpRowY(i);
+    const color = LANE_COLORS[c.lane % LANE_COLORS.length];
+
+    for (const ph of c.parents) {
+      const pi = indexMap[ph];
+      if (pi === undefined) continue;
+      const p = commits[pi];
+      const x2 = ggpLaneX(p.lane), y2 = ggpRowY(pi);
+      if (c.lane === p.lane) {
+        lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2"/>`;
+      } else {
+        const my = (y1 + y2) / 2;
+        lines += `<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="2"/>`;
+      }
+    }
+  }
+
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    const cx = ggpLaneX(c.lane), cy = ggpRowY(i);
+    const color = LANE_COLORS[c.lane % LANE_COLORS.length];
+    const isHead = c.refs.some(r => r === 'HEAD' || r.startsWith('HEAD ->'));
+    const isMerge = c.parents.length > 1;
+    const r = isMerge ? GGP_R + 2 : GGP_R;
+    if (isHead) {
+      dots += `<circle cx="${cx}" cy="${cy}" r="${r + 4}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.4"/>`;
+    }
+    dots += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" data-hash="${c.hash}" class="ggp-dot"/>`;
+  }
+
+  svg.innerHTML = `<g class="ggp-lines">${lines}</g><g class="ggp-dots">${dots}</g>`;
+
+  svg.querySelectorAll('.ggp-dot').forEach(dot => {
+    dot.style.cursor = 'pointer';
+    dot.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectGGPCommit(dot.dataset.hash);
+    });
+  });
+
+  const labels = document.getElementById('ggpCommitLabels');
+  labels.style.left = labelLeft + 'px';
+  labels.style.width = `calc(100% - ${labelLeft}px)`;
+  labels.innerHTML = '';
+  labels.style.height = svgH + 'px';
+
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    const top = i * GGP_ROW;
+    const row = document.createElement('div');
+    row.className = 'ggp-commit-row';
+    row.dataset.hash = c.hash;
+    row.style.top = top + 'px';
+    row.style.height = GGP_ROW + 'px';
+
+    const dateStr = c.date ? new Date(c.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+    const headRef = c.refs.find(r => r.startsWith('HEAD ->'));
+    const refs = c.refs.filter(r => r && !r.startsWith('HEAD ->') && r !== 'HEAD');
+
+    const refHtml = [
+      headRef ? `<span class="ggp-ref-badge ggp-ref-head">HEAD</span>` : '',
+      c.refs.includes('HEAD') && !headRef ? `<span class="ggp-ref-badge ggp-ref-head">HEAD</span>` : '',
+      ...refs.map(r =>
+        `<span class="ggp-ref-badge ${r.startsWith('origin/') ? 'ggp-ref-remote' : 'ggp-ref-branch'}">${escapeHtml(r)}</span>`
+      )
+    ].join('');
+
+    row.innerHTML = `
+      <div class="ggp-commit-text">
+        <span class="ggp-commit-msg">${escapeHtml(c.message)}</span>
+        <span class="ggp-commit-meta">${c.hash.slice(0,7)} · ${dateStr}</span>
+      </div>
+      ${refHtml ? `<div class="ggp-commit-refs">${refHtml}</div>` : ''}
+    `;
+    row.addEventListener('click', () => selectGGPCommit(c.hash));
+    labels.appendChild(row);
+  }
+
+  document.getElementById('ggpGraphScroll').style.position = 'relative';
+}
+
+function selectGGPCommit(hash) {
+  GGP.selectedHash = hash;
+  document.querySelectorAll('.ggp-commit-row').forEach(r => {
+    r.classList.toggle('selected', r.dataset.hash === hash);
+  });
+  const commit = GGP.commits.find(c => c.hash === hash);
+  if (!commit) return;
+  const idx = GGP.commits.indexOf(commit);
+  const popover = document.getElementById('ggpCommitPopover');
+  const scroll = document.getElementById('ggpGraphScroll');
+  popover.style.display = 'block';
+  const scrollH = scroll.clientHeight;
+  const popH = 130;
+  const topInScroll = (idx * GGP_ROW + GGP_ROW) - scroll.scrollTop;
+  popover.style.top = Math.min(topInScroll + 4, scrollH - popH - 8) + 'px';
+  document.getElementById('ggpPopoverHash').textContent = commit.hash.slice(0,7);
+  document.getElementById('ggpPopoverMsg').textContent = commit.message;
+  document.getElementById('ggpPopoverDate').textContent = commit.date ? new Date(commit.date).toLocaleString() : '';
+}
+
+async function loadGGP() {
+  try {
+    const [graphRes, branchRes] = await Promise.all([
+      fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/graph`),
+      fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/branches`)
+    ]);
+    if (!graphRes.ok) return;
+    const commits = await graphRes.json();
+    layoutGGPCommits(commits);
+    GGP.commits = commits;
+    renderGGPGraph();
+
+    if (branchRes.ok) {
+      const { current, branches } = await branchRes.json();
+      const sel = document.getElementById('ggpBranchSelect');
+      sel.innerHTML = branches.map(b =>
+        `<option value="${escapeHtml(b)}" ${b === current ? 'selected' : ''}>${escapeHtml(b)}</option>`
+      ).join('');
+      const mergeSel = document.getElementById('ggpMergeSelect');
+      const others = branches.filter(b => b !== current);
+      mergeSel.innerHTML = `<option value="">Crush (merge) branch…</option>` +
+        others.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+    }
+  } catch (e) { console.error('GGP load:', e); }
+}
+
+function openGGP() {
+  GGP.open = true;
+  const panel = document.getElementById('gitGraphPanel');
+  panel.classList.add('open');
+  panel.style.height = GGP.panelH + 'px';
+  loadGGP();
+}
+
+function closeGGP() {
+  GGP.open = false;
+  document.getElementById('gitGraphPanel').classList.remove('open');
+  document.getElementById('ggpCommitPopover').style.display = 'none';
+}
+
 // ── Event Wiring ──────────────────────────────────────────────
 
 // Floating note button
@@ -1810,6 +2080,142 @@ document.getElementById('diffTabFile').addEventListener('click', () => {
 document.getElementById('diffCommitSelect').addEventListener('change', loadDiffReference);
 document.getElementById('diffProjectSelect').addEventListener('change', e => loadDiffFileList(e.target.value));
 document.getElementById('diffFileSelect').addEventListener('change', loadDiffReference);
+
+// ── Git Graph Panel event wiring ──────────────────────────────
+document.getElementById('gitGraphToggleBtn').addEventListener('click', () => {
+  GGP.open ? closeGGP() : openGGP();
+});
+document.getElementById('ggpCloseBtn').addEventListener('click', closeGGP);
+
+// Close popover when clicking outside
+document.getElementById('ggpGraphScroll').addEventListener('click', e => {
+  if (!e.target.closest('.ggp-commit-row') && !e.target.closest('.ggp-dot') && !e.target.closest('.ggp-commit-popover')) {
+    document.getElementById('ggpCommitPopover').style.display = 'none';
+    GGP.selectedHash = null;
+    document.querySelectorAll('.ggp-commit-row').forEach(r => r.classList.remove('selected'));
+  }
+});
+
+// New branch toggle row
+document.getElementById('ggpNewBranchBtn').addEventListener('click', () => {
+  const row = document.getElementById('ggpNewBranchRow');
+  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+  if (row.style.display !== 'none') document.getElementById('ggpBranchNameInput').focus();
+});
+document.getElementById('ggpBranchCancelBtn').addEventListener('click', () => {
+  document.getElementById('ggpNewBranchRow').style.display = 'none';
+  document.getElementById('ggpBranchNameInput').value = '';
+  GGP.fromHash = null;
+});
+document.getElementById('ggpBranchConfirmBtn').addEventListener('click', async () => {
+  const name = document.getElementById('ggpBranchNameInput').value.trim();
+  if (!name) return;
+  try {
+    const body = { name };
+    if (GGP.fromHash) body.from = GGP.fromHash;
+    const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/branch`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (r.ok) {
+      document.getElementById('ggpNewBranchRow').style.display = 'none';
+      document.getElementById('ggpBranchNameInput').value = '';
+      GGP.fromHash = null;
+      toast(`Branch "${name}" created`, 'success');
+      loadGGP();
+    } else {
+      const d = await r.json();
+      toast('Branch failed: ' + d.error, 'error');
+    }
+  } catch {}
+});
+document.getElementById('ggpBranchNameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('ggpBranchConfirmBtn').click();
+  if (e.key === 'Escape') document.getElementById('ggpBranchCancelBtn').click();
+});
+
+// Branch from here (popover button)
+document.getElementById('ggpPopoverBranchBtn').addEventListener('click', () => {
+  GGP.fromHash = GGP.selectedHash;
+  document.getElementById('ggpCommitPopover').style.display = 'none';
+  const row = document.getElementById('ggpNewBranchRow');
+  row.style.display = 'flex';
+  document.getElementById('ggpBranchNameInput').focus();
+});
+
+// Compare commit (open diff mode)
+document.getElementById('ggpPopoverDiffBtn').addEventListener('click', () => {
+  const hash = GGP.selectedHash;
+  if (!hash) return;
+  document.getElementById('ggpCommitPopover').style.display = 'none';
+  if (!diffState.active) openDiffMode();
+  const sel = document.getElementById('diffCommitSelect');
+  if ([...sel.options].some(o => o.value === hash)) {
+    sel.value = hash;
+    loadDiffReference();
+  } else {
+    populateDiffCommits().then(() => {
+      sel.value = hash;
+      loadDiffReference();
+    });
+  }
+});
+
+// Branch checkout via header select
+document.getElementById('ggpBranchSelect').addEventListener('change', async e => {
+  const branch = e.target.value;
+  if (!branch) return;
+  try {
+    const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/checkout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch })
+    });
+    if (r.ok) {
+      toast(`Switched to branch "${branch}"`, 'success');
+      loadGGP();
+      await loadProjectFileList();
+    } else {
+      const d = await r.json();
+      toast('Checkout failed: ' + d.error, 'error');
+      loadGGP(); // re-sync the select
+    }
+  } catch {}
+});
+
+// Merge (crush)
+document.getElementById('ggpMergeBtn').addEventListener('click', async () => {
+  const branch = document.getElementById('ggpMergeSelect').value;
+  if (!branch) return;
+  const del = confirm(`Merge branch "${branch}" into current branch and delete it?`);
+  try {
+    const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/git/merge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch, deleteAfter: del })
+    });
+    if (r.ok) {
+      toast(`Merged "${branch}"${del ? ' and deleted' : ''}`, 'success');
+      loadGGP();
+    } else {
+      const d = await r.json();
+      toast('Merge failed: ' + d.error, 'error');
+    }
+  } catch {}
+});
+
+// Resize handle (drag top edge of panel to resize vertically)
+const ggpHandle = document.getElementById('ggpResizeHandle');
+ggpHandle.addEventListener('mousedown', e => {
+  GGP.dragging = true;
+  GGP.dragStartY = e.clientY;
+  GGP.dragStartH = document.getElementById('gitGraphPanel').offsetHeight;
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!GGP.dragging) return;
+  const delta = GGP.dragStartY - e.clientY;
+  const newH = Math.max(120, Math.min(window.innerHeight - 100, GGP.dragStartH + delta));
+  GGP.panelH = newH;
+  document.getElementById('gitGraphPanel').style.height = newH + 'px';
+});
+document.addEventListener('mouseup', () => { GGP.dragging = false; });
 
 // Global keyboard shortcuts
 document.addEventListener('keydown', e => {

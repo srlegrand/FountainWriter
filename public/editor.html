@@ -187,6 +187,13 @@
         </div>
       </div>
       <div class="git-log" id="gitLog"></div>
+      <button class="git-graph-toggle-btn" id="gitGraphToggleBtn" title="Show visual git graph">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+        Branch graph
+      </button>
     </div>
   </aside>
 
@@ -208,6 +215,45 @@
       Tab to cycle element · Ctrl+S to save
     </div>
   </footer>
+</div>
+
+<!-- Git Graph Panel -->
+<div class="git-graph-panel" id="gitGraphPanel">
+  <div class="ggp-resize-handle" id="ggpResizeHandle"></div>
+  <div class="ggp-header">
+    <select class="ggp-branch-select" id="ggpBranchSelect"></select>
+    <span class="ggp-title">Git Graph</span>
+    <div class="ggp-header-actions">
+      <button class="ggp-btn" id="ggpNewBranchBtn" title="New branch">＋ Branch</button>
+      <button class="ggp-icon-btn" id="ggpCloseBtn" title="Close">✕</button>
+    </div>
+  </div>
+  <div class="ggp-new-branch-row" id="ggpNewBranchRow" style="display:none">
+    <input class="ggp-branch-input" id="ggpBranchNameInput" placeholder="branch-name" />
+    <button class="ggp-btn ggp-btn-confirm" id="ggpBranchConfirmBtn">Create</button>
+    <button class="ggp-btn" id="ggpBranchCancelBtn">Cancel</button>
+  </div>
+  <div class="ggp-graph-scroll" id="ggpGraphScroll">
+    <svg id="ggpSvg" class="ggp-svg"></svg>
+    <div class="ggp-commit-labels" id="ggpCommitLabels"></div>
+    <div class="ggp-commit-popover" id="ggpCommitPopover" style="display:none">
+      <div class="ggp-popover-hash" id="ggpPopoverHash"></div>
+      <div class="ggp-popover-msg" id="ggpPopoverMsg"></div>
+      <div class="ggp-popover-date" id="ggpPopoverDate"></div>
+      <div class="ggp-popover-actions">
+        <button class="ggp-btn ggp-btn-sm" id="ggpPopoverDiffBtn">Compare</button>
+        <button class="ggp-btn ggp-btn-sm" id="ggpPopoverBranchBtn">Branch from here</button>
+      </div>
+    </div>
+  </div>
+  <div class="ggp-footer">
+    <div class="ggp-merge-row" id="ggpMergeRow">
+      <select class="ggp-branch-select" id="ggpMergeSelect">
+        <option value="">Crush (merge) branch…</option>
+      </select>
+      <button class="ggp-btn ggp-btn-crush" id="ggpMergeBtn">Crush</button>
+    </div>
+  </div>
 </div>
 
 <!-- Autocomplete Dropdown -->

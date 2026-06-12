@@ -1339,6 +1339,7 @@ body.focus-mode .editor-sidebar { width: 0; overflow: hidden; opacity: 0; pointe
 body.focus-mode .editor-layout { grid-template-columns: 0 1fr 0; }
 body.focus-mode .editor-scroll-area { padding: 4rem 4rem; }
 body.focus-mode .editor-topbar .topbar-title { font-size: 1rem; }
+body.focus-mode .git-graph-panel { display: none !important; }
 
 /* ── Settings Panel ─────────────────────────────────────────── */
 .settings-panel {
@@ -1544,6 +1545,152 @@ body.diff-mode .diff-ref-page { display: block; }
 .diff-ref-block[data-type="transition"] { color: var(--c-transition); text-align: right; text-transform: uppercase; }
 .diff-ref-block[data-type="action"] { color: var(--c-action); }
 .diff-note-tag { font-size: 0.62rem; font-family: var(--font-ui); padding: 1px 5px; border-radius: 8px; margin-left: 6px; vertical-align: middle; background: rgba(251,191,36,0.2); color: var(--accent); }
+
+/* ── File Delete Button in file switcher ─────────────────────── */
+.fsd-file-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-4);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast), background var(--t-fast);
+  opacity: 0;
+}
+.fsd-file-item:hover .fsd-file-delete-btn { opacity: 1; }
+.fsd-file-delete-btn:hover { color: var(--red); background: var(--red-dim); }
+.fsd-file-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  background: var(--red-dim);
+  border-radius: var(--r-sm);
+  font-size: 0.75rem;
+  color: var(--red);
+}
+.fsd-file-confirm-row span { flex: 1; }
+.fsd-file-confirm-yes, .fsd-file-confirm-no {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: var(--r-sm);
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.fsd-file-confirm-yes { color: var(--red); }
+.fsd-file-confirm-yes:hover { background: var(--red); color: white; }
+.fsd-file-confirm-no { color: var(--text-3); }
+.fsd-file-confirm-no:hover { background: var(--surface-4); color: var(--text); }
+
+/* ── Git Graph Panel ─────────────────────────────────────────── */
+.git-graph-toggle-btn {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; margin-top: 0.75rem;
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  color: var(--text-2); border-radius: var(--r-sm);
+  padding: 0.35rem 0.6rem; font-size: 0.78rem; cursor: pointer;
+  transition: all var(--t-fast);
+}
+.git-graph-toggle-btn:hover { background: var(--surface-3); color: var(--text); }
+
+.git-graph-panel {
+  position: fixed;
+  bottom: 36px; right: 0;
+  width: 440px; height: 500px;
+  min-height: 80px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-bottom: none;
+  border-right: none;
+  border-radius: var(--r-md) 0 0 0;
+  box-shadow: -4px -4px 32px rgba(0,0,0,0.4);
+  display: none;
+  flex-direction: column;
+  z-index: 300;
+  overflow: hidden;
+}
+.git-graph-panel.open { display: flex; }
+
+.ggp-resize-handle {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 6px; cursor: ns-resize; z-index: 1;
+  background: transparent;
+}
+.ggp-resize-handle:hover { background: var(--accent-dim); }
+
+.ggp-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0 0.75rem; height: 44px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.ggp-title { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); flex: 1; text-align: center; }
+.ggp-branch-select { background: var(--surface-3); border: 1px solid var(--border-2); color: var(--text); border-radius: var(--r-sm); padding: 0.2rem 0.4rem; font-size: 0.75rem; font-family: var(--font-ui); cursor: pointer; max-width: 110px; }
+.ggp-header-actions { display: flex; align-items: center; gap: 0.3rem; }
+.ggp-btn { background: var(--surface-3); border: 1px solid var(--border-2); color: var(--text-2); border-radius: var(--r-sm); padding: 0.2rem 0.55rem; font-size: 0.73rem; font-family: var(--font-ui); cursor: pointer; white-space: nowrap; }
+.ggp-btn:hover { background: var(--surface-4); color: var(--text); }
+.ggp-icon-btn { background: none; border: none; color: var(--text-3); padding: 0.2rem 0.4rem; font-size: 0.85rem; cursor: pointer; border-radius: var(--r-sm); }
+.ggp-icon-btn:hover { color: var(--text); background: var(--surface-3); }
+.ggp-btn-confirm { border-color: var(--accent); color: var(--accent); }
+.ggp-btn-confirm:hover { background: var(--accent); color: #000; }
+.ggp-btn-crush { border-color: var(--purple, #a78bfa); color: var(--purple, #a78bfa); }
+.ggp-btn-crush:hover { background: var(--purple, #a78bfa); color: #000; }
+.ggp-btn-sm { padding: 0.15rem 0.45rem; font-size: 0.7rem; }
+
+.ggp-new-branch-row {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; background: var(--surface-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.ggp-branch-input { flex: 1; background: var(--surface-3); border: 1px solid var(--border-2); color: var(--text); border-radius: var(--r-sm); padding: 0.2rem 0.5rem; font-size: 0.78rem; font-family: var(--font-ui); }
+
+.ggp-graph-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  position: relative;
+}
+.ggp-svg { display: block; flex-shrink: 0; }
+.ggp-commit-labels {
+  position: absolute; top: 0; left: 0; right: 0; pointer-events: none;
+}
+.ggp-commit-row {
+  position: absolute; left: 0; right: 0;
+  display: flex; align-items: center;
+  padding-left: 4px; pointer-events: all; cursor: pointer;
+  border-radius: 4px; transition: background var(--t-fast);
+}
+.ggp-commit-row:hover { background: var(--surface-2); }
+.ggp-commit-row.selected { background: var(--accent-dim); }
+.ggp-commit-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ggp-commit-msg { font-size: 0.73rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.ggp-commit-meta { font-size: 0.65rem; color: var(--text-3); }
+.ggp-commit-refs { display: flex; gap: 3px; flex-wrap: wrap; margin-left: 6px; }
+.ggp-ref-badge { font-size: 0.6rem; font-weight: 600; padding: 1px 5px; border-radius: 8px; white-space: nowrap; }
+.ggp-ref-head { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+.ggp-ref-branch { background: var(--surface-3); color: var(--text-2); border: 1px solid var(--border-2); }
+.ggp-ref-remote { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+
+.ggp-commit-popover {
+  position: absolute; left: 8px; right: 8px;
+  background: var(--surface-3); border: 1px solid var(--border-2);
+  border-radius: var(--r-md); padding: 0.6rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 10;
+}
+.ggp-popover-hash { font-size: 0.65rem; color: var(--text-3); font-family: monospace; }
+.ggp-popover-msg { font-size: 0.82rem; font-weight: 500; color: var(--text); margin: 0.25rem 0; }
+.ggp-popover-date { font-size: 0.68rem; color: var(--text-3); margin-bottom: 0.5rem; }
+.ggp-popover-actions { display: flex; gap: 0.5rem; }
+
+.ggp-footer {
+  border-top: 1px solid var(--border); padding: 0.5rem 0.75rem;
+  flex-shrink: 0; background: var(--surface-2);
+}
+.ggp-merge-row { display: flex; gap: 0.5rem; align-items: center; }
+.ggp-merge-row .ggp-branch-select { flex: 1; max-width: none; }
 
 /* Print / export styles */
 @media print {

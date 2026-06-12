@@ -370,6 +370,105 @@ app.get('/api/projects/:name/git/file', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// DELETE a fountain file from a project
+app.delete('/api/projects/:name/files', async (req, res) => {
+  try {
+    const { file } = req.query;
+    if (!file || !file.endsWith('.fountain')) return res.status(400).json({ error: 'invalid file' });
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const filePath = path.join(projectPath, file);
+    const notesPath = filePath.replace('.fountain', '.notes.json');
+    await fs.unlink(filePath).catch(() => {});
+    await fs.unlink(notesPath).catch(() => {});
+    const git = simpleGit(projectPath);
+    await git.add('.').catch(() => {});
+    await git.commit(`Deleted ${file}`).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET git graph (all branches, topo order, with parent hashes)
+app.get('/api/projects/:name/git/graph', async (req, res) => {
+  try {
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    const raw = await git.raw([
+      'log', '--all', '--topo-order',
+      '--format=COMMIT:%H|%P|%s|%ai|%D'
+    ]);
+    const commits = raw.split('\n')
+      .filter(l => l.startsWith('COMMIT:'))
+      .map(l => {
+        const parts = l.slice(7).split('|');
+        // format: hash | parents (space-sep) | subject | author-date | ref-names
+        const hash = parts[0] || '';
+        const parentsRaw = parts[1] || '';
+        const parents = parentsRaw.trim() ? parentsRaw.trim().split(' ').filter(p => p.length > 0) : [];
+        return {
+          hash,
+          parents,
+          message: parts[2] || '',
+          date: parts[3] || '',
+          refs: parts[4] ? parts[4].split(',').map(r => r.trim()).filter(Boolean) : []
+        };
+      });
+    res.json(commits);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET local branches
+app.get('/api/projects/:name/git/branches', async (req, res) => {
+  try {
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    const summary = await git.branchLocal();
+    res.json({ current: summary.current, branches: Object.keys(summary.branches) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST create branch
+app.post('/api/projects/:name/git/branch', async (req, res) => {
+  try {
+    const { name, from } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    if (from) {
+      await git.raw(['checkout', '-b', name, from]);
+    } else {
+      await git.checkoutLocalBranch(name);
+    }
+    res.json({ ok: true, name });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST checkout branch
+app.post('/api/projects/:name/git/checkout', async (req, res) => {
+  try {
+    const { branch } = req.body;
+    if (!branch) return res.status(400).json({ error: 'branch required' });
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    await git.checkout(branch);
+    const files = await fs.readdir(projectPath);
+    const fountainFiles = files.filter(f => f.endsWith('.fountain'));
+    res.json({ ok: true, branch, files: fountainFiles });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST merge branch into current
+app.post('/api/projects/:name/git/merge', async (req, res) => {
+  try {
+    const { branch, deleteAfter } = req.body;
+    if (!branch) return res.status(400).json({ error: 'branch required' });
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const git = simpleGit(projectPath);
+    await git.merge([branch]);
+    if (deleteAfter) await git.deleteLocalBranch(branch, true);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Serve editor for project
 app.get('/editor/:name', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'editor.html'));
