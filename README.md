@@ -211,4 +211,4 @@ FountainProjects/
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+GPL-2.0 — see [LICENSE](LICENSE)
