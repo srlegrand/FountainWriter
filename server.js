@@ -370,6 +370,32 @@ app.get('/api/projects/:name/git/file', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PATCH (rename) a fountain file in a project
+app.patch('/api/projects/:name/files', async (req, res) => {
+  try {
+    const { file } = req.query;
+    const { newName } = req.body;
+    if (!file || !file.endsWith('.fountain')) return res.status(400).json({ error: 'invalid file' });
+    if (!newName || !newName.trim()) return res.status(400).json({ error: 'newName required' });
+    const safeName = newName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').substring(0, 40);
+    if (!safeName) return res.status(400).json({ error: 'invalid name' });
+    const newFileName = safeName + '.fountain';
+    const projectPath = path.join(PROJECTS_DIR, req.params.name);
+    const oldPath = path.join(projectPath, file);
+    const newPath = path.join(projectPath, newFileName);
+    const exists = await fs.access(newPath).then(() => true).catch(() => false);
+    if (exists) return res.status(409).json({ error: 'A file with that name already exists' });
+    await fs.rename(oldPath, newPath);
+    const oldNotesPath = oldPath.replace('.fountain', '.notes.json');
+    const newNotesPath = newPath.replace('.fountain', '.notes.json');
+    await fs.rename(oldNotesPath, newNotesPath).catch(() => {});
+    const git = simpleGit(projectPath);
+    await git.add('.').catch(() => {});
+    await git.commit(`Renamed ${file} to ${newFileName}`).catch(() => {});
+    res.json({ ok: true, newFileName });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // DELETE a fountain file from a project
 app.delete('/api/projects/:name/files', async (req, res) => {
   try {

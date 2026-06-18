@@ -1232,12 +1232,41 @@ function renderFileSwitcher() {
     item.innerHTML = `
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span class="fsd-file-name">${escapeHtml(f)}</span>
+      <button class="fsd-file-rename-btn" title="Rename ${escapeHtml(f)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       <button class="fsd-file-delete-btn" title="Delete ${escapeHtml(f)}">✕</button>
     `;
     if (f !== current) {
       item.querySelector('.fsd-file-name').addEventListener('click', () => switchToFile(f));
       item.querySelector('svg').addEventListener('click', () => switchToFile(f));
     }
+    // Rename button — show inline input row
+    const renameBtn = item.querySelector('.fsd-file-rename-btn');
+    renameBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const baseName = f.replace(/\.fountain$/, '');
+      const renameRow = document.createElement('div');
+      renameRow.className = 'fsd-file-rename-row';
+      renameRow.innerHTML = `
+        <input class="fsd-file-rename-input" type="text" value="${escapeHtml(baseName)}" maxlength="40" spellcheck="false" />
+        <button class="fsd-file-rename-ok" title="Rename">✓</button>
+        <button class="fsd-file-rename-cancel" title="Cancel">✕</button>
+      `;
+      const input = renameRow.querySelector('.fsd-file-rename-input');
+      renameRow.querySelector('.fsd-file-rename-ok').addEventListener('click', async ev => {
+        ev.stopPropagation();
+        await renameScreenplay(f, input.value.trim());
+      });
+      renameRow.querySelector('.fsd-file-rename-cancel').addEventListener('click', ev => {
+        ev.stopPropagation();
+        renameRow.replaceWith(item);
+      });
+      input.addEventListener('keydown', async ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); await renameScreenplay(f, input.value.trim()); }
+        if (ev.key === 'Escape') { ev.preventDefault(); renameRow.replaceWith(item); }
+      });
+      item.replaceWith(renameRow);
+      input.select();
+    });
     // Delete button — show inline confirm
     const delBtn = item.querySelector('.fsd-file-delete-btn');
     delBtn.addEventListener('click', e => {
@@ -1285,6 +1314,27 @@ async function deleteScreenplay(fileName) {
     }
   } else {
     toast('Delete failed', 'error');
+  }
+}
+
+async function renameScreenplay(oldFileName, newName) {
+  if (!newName) return;
+  const r = await fetch(`${API}/projects/${encodeURIComponent(state.projectName)}/files?file=${encodeURIComponent(oldFileName)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newName })
+  });
+  const data = await r.json();
+  if (r.ok) {
+    toast(`Renamed to "${data.newFileName}"`, 'success');
+    if (state.fileName === oldFileName) {
+      switchToFile(data.newFileName);
+    } else {
+      await loadProjectFileList();
+    }
+  } else {
+    toast(data.error || 'Rename failed', 'error');
+    await loadProjectFileList();
   }
 }
 
@@ -2217,6 +2267,15 @@ function fileContextMenu(e, fileName) {
       }
     },
     '---',
+    {
+      label: 'Rename…',
+      icon: '✏️',
+      action: () => {
+        const baseName = fileName.replace(/\.fountain$/, '');
+        const newName = prompt('Rename to:', baseName);
+        if (newName !== null && newName.trim()) renameScreenplay(fileName, newName.trim());
+      }
+    },
     {
       label: 'Delete…',
       icon: '🗑',

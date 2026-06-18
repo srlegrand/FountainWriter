@@ -1535,7 +1535,7 @@ body.diff-mode .diff-ref-page { display: block; }
 .diff-note-tag { font-size: 0.62rem; font-family: var(--font-ui); padding: 1px 5px; border-radius: 8px; margin-left: 6px; vertical-align: middle; background: rgba(251,191,36,0.2); color: var(--accent); }
 
 /* ── File Delete Button in file switcher ─────────────────────── */
-.fsd-file-delete-btn {
+.fsd-file-rename-btn, .fsd-file-delete-btn {
   background: none;
   border: none;
   color: var(--text-4);
@@ -1547,9 +1547,46 @@ body.diff-mode .diff-ref-page { display: block; }
   border-radius: var(--r-sm);
   transition: color var(--t-fast), background var(--t-fast);
   opacity: 0;
+  display: flex; align-items: center;
 }
+.fsd-file-item:hover .fsd-file-rename-btn,
 .fsd-file-item:hover .fsd-file-delete-btn { opacity: 1; }
+.fsd-file-rename-btn:hover { color: var(--accent); background: var(--accent-dim); }
 .fsd-file-delete-btn:hover { color: var(--red); background: var(--red-dim); }
+.fsd-file-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  border: 1px solid var(--accent-dim);
+}
+.fsd-file-rename-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  color: var(--text);
+  min-width: 0;
+}
+.fsd-file-rename-ok, .fsd-file-rename-cancel {
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.fsd-file-rename-ok { color: var(--accent); }
+.fsd-file-rename-ok:hover { background: var(--accent); color: white; }
+.fsd-file-rename-cancel { color: var(--text-3); }
+.fsd-file-rename-cancel:hover { background: var(--surface-4); color: var(--text); }
 .fsd-file-confirm-row {
   display: flex;
   align-items: center;
